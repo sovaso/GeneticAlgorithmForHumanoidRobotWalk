@@ -19,7 +19,7 @@ class AgentModel(nn.Module):
             output_dim (integer): dimension of output layer of nn (action space number)
         """
 
-        super(ActorModel, self).__init__()
+        super(AgentModel, self).__init__()
 
         self.first_layer = nn.Linear(input_dim, 128)
         self.second_layer = nn.Linear(128, 64)
@@ -54,7 +54,7 @@ class Agent():
             output_dim (integer): dimension of output layer of nn (action space number)
         """
 
-        self.model = ActorModel(input_dim, output_dim)
+        self.model = AgentModel(input_dim, output_dim)
         self.covariance_matrix = torch.diag(input=torch.full(size=(output_dim,), fill_value=0.5), diagonal=0)
 
     def get_action(self, state):
