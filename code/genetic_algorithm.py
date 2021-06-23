@@ -135,13 +135,14 @@ class GeneticAlgorithm():
         return fitness_scores
 
     def mutate_agent(self, agent):
-        """ TODO
+        """ Mutating agent using equation θ = θ + σ * e, where θ are the agent's nn's parameters,
+        σ is mutation coefficient (hyperparameter) and e is a number from normal distribution
 
         Args:
-            agent ([type]): [description]
+            agent (object): one agent from the population
 
         Returns:
-            [type]: [description]
+            (object): mutated agent for a new generation of the population
         """
 
         child_agent = copy.deepcopy(agent)
@@ -164,16 +165,18 @@ class GeneticAlgorithm():
                     param[i0] += self.mutation_power * np.random.randn()
         return child_agent
 
-    def return_children(self, agents, sorted_parent_indexes, elite_index):
-        """[summary]
+    def create_next_generation(self, agents, sorted_parent_indexes, elite_index):
+        """ Based on fitness score of current generation, create new generation by mutating
+        N-1 agents and adding one elite agent in order to form the next generation
 
         Args:
-            agents ([type]): [description]
-            sorted_parent_indexes ([type]): [description]
-            elite_index ([type]): [description]
+            agents (array): current generation of the population
+            sorted_parent_indexes (array): indices of the agents with the best fitness score
+            elite_index (integer): index where elite agent can be found in current generation
 
         Returns:
-            [type]: [description]
+            (array): the next generation of the population
+            (integer): index of elite agent in new generation
         """
 
         children_agents = []
@@ -181,38 +184,53 @@ class GeneticAlgorithm():
         for i in range(len(agents) - 1):
             selected_agent_index = sorted_parent_indexes[np.random.randint(len(sorted_parent_indexes))]
             children_agents.append(self.mutate_agent(agents[selected_agent_index]))
-        # now add one elite
+        #now add one elite
         elite_child = self.add_elite(agents, sorted_parent_indexes, elite_index)
         children_agents.append(elite_child)
-        elite_index = len(children_agents) - 1  # it is the last one
+        #it will be stored as the last one
+        elite_index = len(children_agents) - 1
         return children_agents, elite_index
 
     def add_elite(self, agents, sorted_parent_indexes, elite_index=None, only_consider_top_n=10):
-        candidate_elite_index = sorted_parent_indexes[:only_consider_top_n]
+        """ Creating one elite agent by considering only 10 n agents that performed with their
+        fitness score, by taking another run to calculate fitness score and choosing the best
+        among them to select the elite agent for the next generation.
 
+        Args:
+            agents (array): current generation of the population
+            sorted_parent_indexes (array): indices of the agents with the best fitness score
+            elite_index (integer, optional): index of the current elite agent. Defaults to None.
+            only_consider_top_n (int, optional): number to define how many agents will be 
+                                                 considered for the next elite agent. Defaults 
+                                                 to 10.
+
+        Returns:
+            (object): new elite agent
+        """
+
+        #taking only top n agents
+        candidate_elite_index = sorted_parent_indexes[:only_consider_top_n]
         if (elite_index is not None):
             candidate_elite_index = np.append(candidate_elite_index, [elite_index])
-
         top_score = None
         top_elite_index = None
-
+        #calculating fitness score for each elite candidate agent once again
         for i in candidate_elite_index:
             score = self.calculate_fitness_for_one_agent(agents[i])
             print("Score for elite i ", i, " is ", score)
-
             if (top_score is None):
                 top_score = score
                 top_elite_index = i
             elif (score > top_score):
                 top_score = score
                 top_elite_index = i
-
         print("Elite selected with index ", top_elite_index, " and score", top_score)
-
         child_agent = copy.deepcopy(agents[top_elite_index])
         return child_agent
 
     def run_genetic_algorithm(self):
+        """ Main funtion to run the genetic algorithm """
+
         torch.set_grad_enabled(False)
         agents = self.create_initial_population()
         elite_index = None
@@ -220,23 +238,18 @@ class GeneticAlgorithm():
             # return rewards of agents
             rewards = self.calculate_fitness_for_all_agents(agents)
             # sort by rewards
-            # reverses and gives top values (argsort sorts by ascending by default) 
-            # https://stackoverflow.com/questions/16486252/is-it-possible-to-use-argsort-in-descending-order
             sorted_parent_indexes = np.argsort(rewards)[::-1][:self.top_limit_agents]  
             print("")
             print("")
             top_rewards = []
             for best_parent in sorted_parent_indexes:
                 top_rewards.append(rewards[best_parent])
-
             print("Generation ", generation, " | Mean rewards: ", np.mean(rewards), " | Mean of top 5: ",
                 np.mean(top_rewards[:5]))
-            # print(rewards)
             print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes)
             print("Rewards for top: ", top_rewards)
-
             # setup an empty list for containing children agents
-            children_agents, elite_index = self.return_children(agents, sorted_parent_indexes, elite_index)
-
+            children_agents, elite_index = self.create_next_generation(agents, sorted_parent_indexes, 
+                                                                       elite_index)
             # kill all agents, and replace them with their children
             agents = children_agents
