@@ -21,7 +21,8 @@ if __name__ == "__main__":
     ga = GeneticAlgorithm(number_of_agents = 20, 
                           number_of_generations = 1000, 
                           number_of_episodes = 3, 
-                          top_limit_agents = 3, 
+                          top_limit_agents = 16, 
                           environment = environment, 
-                          mutation_power = 0.00224)
+                          mutation_power = 0.00224,
+                          mutation_chance = 0.2)
     ga.run_genetic_algorithm()

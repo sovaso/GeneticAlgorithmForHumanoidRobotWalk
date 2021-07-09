@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import torch
 import time
+import random
 from gym.wrappers import Monitor
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,7 +19,7 @@ class GeneticAlgorithm():
     """ Main class for the whole Genetic Algorithm process """
 
     def __init__(self, number_of_agents, number_of_generations, number_of_episodes, top_limit_agents, 
-                 environment, mutation_power):
+                 environment, mutation_power, mutation_chance):
         """ Constructor for the Genetic Algorithm class 
         
         Args:
@@ -29,6 +30,8 @@ class GeneticAlgorithm():
                                         generation
             environment (object): environment that agent will perform action and observe the space of it
             mutation_power (float): coefficient used for mutation of agent's neural network's parameters
+            mutation_chance (float): number between 0 and 1 to present the chance of agent's parameters 
+                                     being mutated
         """
 
         self.number_of_agents = number_of_agents
@@ -37,6 +40,7 @@ class GeneticAlgorithm():
         self.top_limit_agents = top_limit_agents
         self.environment = environment
         self.mutation_power = mutation_power
+        self.mutation_chance = mutation_chance
 
     def initialize_weights(self, agent_model):
         """ Initialize weight for agents neural network using He initialization (because nn's uses relu
@@ -145,6 +149,9 @@ class GeneticAlgorithm():
             (object): mutated agent for a new generation of the population
         """
 
+        c = random.uniform(0, 1)
+        if c > self.mutation_chance:
+            return agent
         child_agent = copy.deepcopy(agent)
         for param in child_agent.model.parameters():
             #weights of Conv2D
@@ -165,7 +172,49 @@ class GeneticAlgorithm():
                     param[i0] += self.mutation_power * np.random.randn()
         return child_agent
 
-    def create_next_generation(self, agents, sorted_parent_indexes, elite_index):
+    def crossover_agents(self, first_agent, second_agent):
+        """ Creating two children by taking a random uniform number C between 0 and 1 and summing
+        both parent nns parameters by the formula: param1*C+param2(1-C) and other replacing param1
+        and param2 in the formula.
+
+        Args:
+            first_agent (object): first parent
+            second_agent (object): second parent
+
+        Returns:
+            (object, object): 2 children for next generation
+        """
+
+        c = random.uniform(0, 1)
+        first_child = copy.deepcopy(first_agent)
+        second_child = copy.deepcopy(second_agent)
+        for (param_p1, param_p2, param_c1, param_c2) in zip(first_agent.model.parameters(),
+                           second_agent.model.parameters(), first_child.model.parameters(),
+                           second_child.model.parameters()):
+            #weights of Conv2D
+            if (len(param_p1.shape) == 4):  
+                for i0 in range(param_p1.shape[0]):
+                    for i1 in range(param_p1.shape[1]):
+                        for i2 in range(param_p1.shape[2]):
+                            for i3 in range(param_p1.shape[3]):
+                                param_c1[i0][i1][i2][i3] += c*param_p1[i0][i1][i2][i3]+ \
+                                                            (1-c)*param_p2[i0][i1][i2][i3]
+                                param_c2[i0][i1][i2][i3] += c*param_p2[i0][i1][i2][i3]+ \
+                                                            (1-c)*param_p1[i0][i1][i2][i3]
+            #weights of linear layer
+            elif (len(param_p1.shape) == 2):  
+                for i0 in range(param_p1.shape[0]):
+                    for i1 in range(param_p1.shape[1]):
+                        param_c1[i0][i1] += c*param_p1[i0][i1]+(1-c)*param_p2[i0][i1]
+                        param_c2[i0][i1] += c*param_p2[i0][i1]+(1-c)*param_p1[i0][i1]
+            #biases of linear layer or conv layer
+            elif (len(param_p1.shape) == 1):  
+                for i0 in range(param_p1.shape[0]):
+                    param_c1[i0] += c*param_p1[i0]+(1-c)*param_p2[i0]
+                    param_c2[i0] += c*param_p2[i0]+(1-c)*param_p1[i0]
+        return first_child, second_child
+
+    def create_next_generation(self, agents, sorted_parent_indexes):
         """ Based on fitness score of current generation, create new generation by mutating
         N-1 agents and adding one elite agent in order to form the next generation
 
@@ -181,52 +230,35 @@ class GeneticAlgorithm():
 
         children_agents = []
         #first take selected parents from sorted_parent_indexes and generate N-1 children
-        for i in range(len(agents) - 1):
-            selected_agent_index = sorted_parent_indexes[np.random.randint(len(sorted_parent_indexes))]
-            children_agents.append(self.mutate_agent(agents[selected_agent_index]))
-        #now add one elite
-        elite_child = self.add_elite(agents, sorted_parent_indexes, elite_index)
-        children_agents.append(elite_child)
-        #it will be stored as the last one
-        elite_index = len(children_agents) - 1
-        return children_agents, elite_index
+        for i in range((len(agents) - self.top_limit_agents) // 2):
+            selected_agent_index_1, selected_agent_index_2 = self.selection_of_parents(
+                                                                  sorted_parent_indexes)
+            child_agent_1, child_agent_2 = self.crossover_agents(agents[selected_agent_index_1],
+                                                                 agents[selected_agent_index_2])
+            children_agents.append(self.mutate_agent(child_agent_1))
+            children_agents.append(self.mutate_agent(child_agent_2))
+        #TODO
+        for index in sorted_parent_indexes[:self.top_limit_agents]:
+            children_agents.append(self.mutate_agent(agents[index]))
+        return children_agents
 
-    def add_elite(self, agents, sorted_parent_indexes, elite_index=None, only_consider_top_n=10):
-        """ Creating one elite agent by considering only 10 n agents that performed with their
-        fitness score, by taking another run to calculate fitness score and choosing the best
-        among them to select the elite agent for the next generation.
+    def selection_of_parents(self, sorted_parent_indexes):
+        """ Selecting possible parents for the crossover to create new generation and selecting them
+        based on fitness function (reward from episodes) using softmax to give everyone a chance
 
         Args:
-            agents (array): current generation of the population
-            sorted_parent_indexes (array): indices of the agents with the best fitness score
-            elite_index (integer, optional): index of the current elite agent. Defaults to None.
-            only_consider_top_n (int, optional): number to define how many agents will be 
-                                                 considered for the next elite agent. Defaults 
-                                                 to 10.
+            sorted_parent_indexes (array): indexes of parents sorted by fitness function
 
         Returns:
-            (object): new elite agent
+            (int,int): indexes of two selected parents
         """
 
-        #taking only top n agents
-        candidate_elite_index = sorted_parent_indexes[:only_consider_top_n]
-        if (elite_index is not None):
-            candidate_elite_index = np.append(candidate_elite_index, [elite_index])
-        top_score = None
-        top_elite_index = None
-        #calculating fitness score for each elite candidate agent once again
-        for i in candidate_elite_index:
-            score = self.calculate_fitness_for_one_agent(agents[i])
-            print("Score for elite i ", i, " is ", score)
-            if (top_score is None):
-                top_score = score
-                top_elite_index = i
-            elif (score > top_score):
-                top_score = score
-                top_elite_index = i
-        print("Elite selected with index ", top_elite_index, " and score", top_score)
-        child_agent = copy.deepcopy(agents[top_elite_index])
-        return child_agent
+        selection_util_array = np.zeros(self.number_of_agents)
+        for iter in range(self.number_of_agents):
+            selection_util_array[iter] = np.exp(-1 * (iter+1) * random.uniform(0, 1))
+        selection_util_array /= np.sum(selection_util_array)
+        parent_indexes = np.random.choice(sorted_parent_indexes, 2, p=selection_util_array)
+        return parent_indexes[0], parent_indexes[1]
 
     def run_genetic_algorithm(self):
         """ Main funtion to run the genetic algorithm """
@@ -238,18 +270,17 @@ class GeneticAlgorithm():
             # return rewards of agents
             rewards = self.calculate_fitness_for_all_agents(agents)
             # sort by rewards
-            sorted_parent_indexes = np.argsort(rewards)[::-1][:self.top_limit_agents]  
+            sorted_parent_indexes = np.argsort(rewards)[::-1] 
             print("")
             print("")
             top_rewards = []
-            for best_parent in sorted_parent_indexes:
+            for best_parent in sorted_parent_indexes[:self.top_limit_agents]:
                 top_rewards.append(rewards[best_parent])
             print("Generation ", generation, " | Mean rewards: ", np.mean(rewards), " | Mean of top 5: ",
                 np.mean(top_rewards[:5]))
             print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes)
             print("Rewards for top: ", top_rewards)
             # setup an empty list for containing children agents
-            children_agents, elite_index = self.create_next_generation(agents, sorted_parent_indexes, 
-                                                                       elite_index)
+            children_agents = self.create_next_generation(agents, sorted_parent_indexes)
             # kill all agents, and replace them with their children
             agents = children_agents
