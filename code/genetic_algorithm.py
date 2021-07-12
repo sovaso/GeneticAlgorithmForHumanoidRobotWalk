@@ -13,13 +13,15 @@ import copy
 import warnings
 import pybulletgym
 from agent import Agent
+import os
+import json
 
 
 class GeneticAlgorithm():
     """ Main class for the whole Genetic Algorithm process """
 
     def __init__(self, number_of_agents, number_of_generations, number_of_episodes, top_limit_agents, 
-                 environment, mutation_power, mutation_chance):
+                 environment, mutation_power, mutation_chance, path_to_save_results):
         """ Constructor for the Genetic Algorithm class 
         
         Args:
@@ -32,6 +34,7 @@ class GeneticAlgorithm():
             mutation_power (float): coefficient used for mutation of agent's neural network's parameters
             mutation_chance (float): number between 0 and 1 to present the chance of agent's parameters 
                                      being mutated
+            path_to_save_results (string): path where the results will be saved
         """
 
         self.number_of_agents = number_of_agents
@@ -41,6 +44,7 @@ class GeneticAlgorithm():
         self.environment = environment
         self.mutation_power = mutation_power
         self.mutation_chance = mutation_chance
+        self.path_to_save_results = path_to_save_results
 
     def initialize_weights(self, agent_model):
         """ Initialize weight for agents neural network using He initialization (because nn's uses relu
@@ -260,9 +264,30 @@ class GeneticAlgorithm():
         parent_indexes = np.random.choice(sorted_parent_indexes, 2, p=selection_util_array)
         return parent_indexes[0], parent_indexes[1]
 
+    def save_generation_results(self, agents, all_mean_rewards, all_mean_top_rewards, 
+                                all_top_indexes, all_top_rewards):
+        result_json_string = "{\"all_mean_rewards\":\"" + str(all_mean_rewards) + "\"," + \
+                             "\"all_mean_top_rewards\":\"" + str(all_mean_top_rewards) + "\"," + \
+                             "\"all_top_indexes\":\"" + str(all_top_indexes) + "\"," + \
+                             "\"all_top_rewards\":\"" + str(all_top_rewards) + "\"," + \
+                             "\"mutation_power\":\"" + str(mutation_power) + "\"," + \
+                             "\"mutation_chance\":\"" + str(mutation_chance) + "\"}"
+
+        index = 1
+        while os.path.isfile(self.path_to_save_results + "/experiment_" + str(index) + ".json"):
+            index += 1
+        with open(self.path_to_save_results + "/experiment_" + str(index) + ".json", 'w') as f:
+            json.dump(result_json_string, f)
+
+
     def run_genetic_algorithm(self):
         """ Main funtion to run the genetic algorithm """
 
+        #parameters to save about the generation
+        all_mean_rewards = []
+        all_mean_top_rewards = []
+        all_top_rewards = []
+        all_top_indexes = []
         torch.set_grad_enabled(False)
         agents = self.create_initial_population()
         elite_index = None
@@ -278,9 +303,16 @@ class GeneticAlgorithm():
                 top_rewards.append(rewards[best_parent])
             print("Generation ", generation, " | Mean rewards: ", np.mean(rewards), " | Mean of top 5: ",
                 np.mean(top_rewards[:5]))
-            print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes)
+            print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes[:self.top_limit_agents])
             print("Rewards for top: ", top_rewards)
             # setup an empty list for containing children agents
             children_agents = self.create_next_generation(agents, sorted_parent_indexes)
             # kill all agents, and replace them with their children
             agents = children_agents
+            # save important results in lists
+            all_mean_rewards.append(np.mean(rewards))
+            all_mean_top_rewards.append(np.mean(top_rewards[:self.top_limit_agents]))
+            all_top_rewards.append(sorted_parent_indexes)
+            all_top_indexes.append(top_rewards)
+        self.save_generation_results(agents, all_mean_rewards, all_mean_top_rewards, all_top_indexes, 
+                                     all_top_rewards)
