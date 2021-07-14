@@ -12,53 +12,60 @@ import math
 import copy
 import warnings
 import pybulletgym
-from agent import Agent
+from trpo_agent import TRPOAgent
+from actor import Actor
+from critic import Critic
 import os
 import json
+
+
+class UnitResultUtil:
+
+    def __init__(self, delta_a2, delta_a1, delta_a0, reward):
+        self.delta_a2 = delta_a2
+        self.delta_a1 = delta_a1
+        self.delta_a0 = delta_a0
+        self.reward = reward
+
+
+class GenerationResultUtil:
+
+    def __init__(self, units):
+        self.units = units
+
+    def to_json(self):
+        """ Converting the object to a string that is in json format and can be saved as json file
+
+        Returns:
+            (string): string as json format of the object
+        """
+
+        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True)
 
 
 class GeneticAlgorithm():
     """ Main class for the whole Genetic Algorithm process """
 
-    def __init__(self, number_of_agents, number_of_generations, number_of_episodes, top_limit_agents, 
-                 environment, mutation_power, mutation_chance, path_to_save_results):
+    def __init__(self, number_of_agents, number_of_generations, number_of_iterations, top_limit_agents, 
+                 mutation_chance, environment, path_to_save_results = "../results"):
         """ Constructor for the Genetic Algorithm class 
         
         Args:
             number_of_agents (integer): number of population per each generation
             number_of_generations (integer): number of generations to run ga
-            number_of_episodes (integer): number of episodes to run each agent for fitness function
+            number_of_iterations (integer): number of episodes to run each agent for fitness function
             top_limit_agents (integer): number of how many agents to pick as possible parents for next
                                         generation
-            environment (object): environment that agent will perform action and observe the space of it
-            mutation_power (float): coefficient used for mutation of agent's neural network's parameters
-            mutation_chance (float): number between 0 and 1 to present the chance of agent's parameters 
-                                     being mutated
             path_to_save_results (string): path where the results will be saved
         """
 
         self.number_of_agents = number_of_agents
         self.number_of_generations = number_of_generations
-        self.number_of_episodes = number_of_episodes
+        self.number_of_iterations = number_of_iterations
         self.top_limit_agents = top_limit_agents
-        self.environment = environment
-        self.mutation_power = mutation_power
         self.mutation_chance = mutation_chance
         self.path_to_save_results = path_to_save_results
-
-    def initialize_weights(self, agent_model):
-        """ Initialize weight for agents neural network using He initialization (because nn's uses relu
-        activation function) while biases initialize with zeros
-
-        Args:
-            agent_model (object): neural network of the agent
-        """
-
-        if ((type(agent_model) == nn.Linear) | (type(agent_model) == nn.Conv2d)):
-            #he instead of xavier weight initialization is used because of relu activation
-            torch.nn.init.kaiming_uniform(agent_model.weight, nonlinearity="relu")
-            #put biases to zeros
-            agent_model.bias.data.fill_(0.00)
+        self.environment = environment
 
     def create_initial_population(self):
         """ Creating the first generation of the population by instancing new agents
@@ -67,16 +74,28 @@ class GeneticAlgorithm():
             (array): population of agents
         """
 
+        a2_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
+        a1_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
+        a0_options = [1   ,2   ,3   ,4   ,5   ,6   ,7   ,8   ,9   ,10  ]
+
         agents = []
-        #for each expected agent number create one agent
-        for _ in range(self.number_of_agents):
-            #input dimension is the size of expected state tensor, and output dimension is
-            #the size of expected action tensor
-            agent = Agent(44,17)
-            #we do not need to calculate gradients for this algorithm
-            for param in agent.model.parameters():
-                param.requires_grad = False
-            self.initialize_weights(agent.model)
+        #for each expected agent number we create one agent
+        for iter in range(self.number_of_agents):
+            agent = TRPOAgent(env=self.environment,
+                     actor=Actor(44, 17),
+                     critic=Critic(44, 1, 2.5e-4),
+                     delta_a2=a2_options[iter],
+                     delta_a1=a1_options[iter],
+                     delta_a0=a0_options[iter],
+                     gamma=0.99,
+                     cg_delta=1e-2,
+                     cg_iterations = 10,
+                     alpha=0.99,
+                     backtrack_steps_num=100,
+                     critic_epoch_num=5,
+                     epochs=self.number_of_iterations,
+                     num_of_timesteps=4800,
+                     max_timesteps_per_episode=1600)
             agents.append(agent)
         return agents
 
@@ -92,21 +111,7 @@ class GeneticAlgorithm():
 
         reward_agents = []
         for agent in agents:
-            agent.model.eval()
-            #reset your environment
-            current_state = self.environment.reset()
-            cumulative_reward = 0
-            #1600 is maximal number of steps per one episode
-            for _ in range(1600):
-                #take action based on current state
-                action, _ = agent.get_action(current_state)
-                current_action = action.numpy()
-                # running current action in the environment
-                next_state, reward, done, _ = self.environment.step(current_action)
-                cumulative_reward = cumulative_reward + reward
-                current_state = next_state
-                if done:
-                    break
+            cumulative_reward = agent.train(return_only_rewards=True)
             reward_agents.append(cumulative_reward)
         return reward_agents
 
@@ -121,10 +126,7 @@ class GeneticAlgorithm():
             (float): fitness score for that agent
         """
 
-        fitness_score = 0.
-        for _ in range(self.number_of_episodes):
-            fitness_score += self.run_population([agent])[0]
-        return fitness_score/self.number_of_episodes
+        return self.run_population([agent])[0]
 
     def calculate_fitness_for_all_agents(self, agents):
         """ Calculating fitness function for every agent from the current generation of the
@@ -157,23 +159,10 @@ class GeneticAlgorithm():
         if c > self.mutation_chance:
             return agent
         child_agent = copy.deepcopy(agent)
-        for param in child_agent.model.parameters():
-            #weights of Conv2D
-            if (len(param.shape) == 4):  
-                for i0 in range(param.shape[0]):
-                    for i1 in range(param.shape[1]):
-                        for i2 in range(param.shape[2]):
-                            for i3 in range(param.shape[3]):
-                                param[i0][i1][i2][i3] += self.mutation_power * np.random.randn()
-            #weights of linear layer
-            elif (len(param.shape) == 2):  
-                for i0 in range(param.shape[0]):
-                    for i1 in range(param.shape[1]):
-                        param[i0][i1] += self.mutation_power * np.random.randn()
-            #biases of linear layer or conv layer
-            elif (len(param.shape) == 1):  
-                for i0 in range(param.shape[0]):
-                    param[i0] += self.mutation_power * np.random.randn()
+        c2 = random.uniform(0, 1)
+        child_agent.delta_a2 *= 0.1 * (2*c2 - 1.0)
+        child_agent.delta_a1 *= 0.1 * (2*c2 - 1.0)
+        child_agent.delta_a0 *= 0.1 * (2*c2 - 1.0)
         return child_agent
 
     def crossover_agents(self, first_agent, second_agent):
@@ -192,30 +181,12 @@ class GeneticAlgorithm():
         c = random.uniform(0, 1)
         first_child = copy.deepcopy(first_agent)
         second_child = copy.deepcopy(second_agent)
-        for (param_p1, param_p2, param_c1, param_c2) in zip(first_agent.model.parameters(),
-                           second_agent.model.parameters(), first_child.model.parameters(),
-                           second_child.model.parameters()):
-            #weights of Conv2D
-            if (len(param_p1.shape) == 4):  
-                for i0 in range(param_p1.shape[0]):
-                    for i1 in range(param_p1.shape[1]):
-                        for i2 in range(param_p1.shape[2]):
-                            for i3 in range(param_p1.shape[3]):
-                                param_c1[i0][i1][i2][i3] += c*param_p1[i0][i1][i2][i3]+ \
-                                                            (1-c)*param_p2[i0][i1][i2][i3]
-                                param_c2[i0][i1][i2][i3] += c*param_p2[i0][i1][i2][i3]+ \
-                                                            (1-c)*param_p1[i0][i1][i2][i3]
-            #weights of linear layer
-            elif (len(param_p1.shape) == 2):  
-                for i0 in range(param_p1.shape[0]):
-                    for i1 in range(param_p1.shape[1]):
-                        param_c1[i0][i1] += c*param_p1[i0][i1]+(1-c)*param_p2[i0][i1]
-                        param_c2[i0][i1] += c*param_p2[i0][i1]+(1-c)*param_p1[i0][i1]
-            #biases of linear layer or conv layer
-            elif (len(param_p1.shape) == 1):  
-                for i0 in range(param_p1.shape[0]):
-                    param_c1[i0] += c*param_p1[i0]+(1-c)*param_p2[i0]
-                    param_c2[i0] += c*param_p2[i0]+(1-c)*param_p1[i0]
+        first_child.delta_a2 = first_agent.delta_a2*c + (1-c)*second_agent.delta_a2
+        first_child.delta_a1 = first_agent.delta_a1*c + (1-c)*second_agent.delta_a1
+        first_child.delta_a0 = first_agent.delta_a0*c + (1-c)*second_agent.delta_a0
+        second_child.delta_a2 = second_agent.delta_a2*c + (1-c)*first_agent.delta_a2
+        second_child.delta_a1 = second_agent.delta_a1*c + (1-c)*first_agent.delta_a1
+        second_child.delta_a0 = second_agent.delta_a0*c + (1-c)*first_agent.delta_a0
         return first_child, second_child
 
     def create_next_generation(self, agents, sorted_parent_indexes):
@@ -225,7 +196,6 @@ class GeneticAlgorithm():
         Args:
             agents (array): current generation of the population
             sorted_parent_indexes (array): indices of the agents with the best fitness score
-            elite_index (integer): index where elite agent can be found in current generation
 
         Returns:
             (array): the next generation of the population
@@ -264,33 +234,20 @@ class GeneticAlgorithm():
         parent_indexes = np.random.choice(sorted_parent_indexes, 2, p=selection_util_array)
         return parent_indexes[0], parent_indexes[1]
 
-    def save_generation_results(self, agents, all_mean_rewards, all_mean_top_rewards, 
-                                all_top_indexes, all_top_rewards):
-        result_json_string = "{\"all_mean_rewards\":\"" + str(all_mean_rewards) + "\"," + \
-                             "\"all_mean_top_rewards\":\"" + str(all_mean_top_rewards) + "\"," + \
-                             "\"all_top_indexes\":\"" + str(all_top_indexes) + "\"," + \
-                             "\"all_top_rewards\":\"" + str(all_top_rewards) + "\"," + \
-                             "\"mutation_power\":\"" + str(mutation_power) + "\"," + \
-                             "\"mutation_chance\":\"" + str(mutation_chance) + "\"}"
-
-        index = 1
-        while os.path.isfile(self.path_to_save_results + "/experiment_" + str(index) + ".json"):
-            index += 1
-        with open(self.path_to_save_results + "/experiment_" + str(index) + ".json", 'w') as f:
-            json.dump(result_json_string, f)
-
+    def save_generation_results(self, agents, rewards, number_of_generation):
+        agent_results = []
+        for iter in range(len(agents)):
+            agent_results.append(UnitResultUtil(agents[iter].delta_a2,
+                                                agents[iter].delta_a1,
+                                                agents[iter].delta_a0,
+                                                rewards[iter]))
+        with open(self.path_to_save_results + "/generation_" + str(number_of_generation) + ".json", 'w') as f:
+            json.dump(GenerationResultUtil(agent_results).to_json(), f)
 
     def run_genetic_algorithm(self):
         """ Main funtion to run the genetic algorithm """
 
-        #parameters to save about the generation
-        all_mean_rewards = []
-        all_mean_top_rewards = []
-        all_top_rewards = []
-        all_top_indexes = []
-        torch.set_grad_enabled(False)
         agents = self.create_initial_population()
-        elite_index = None
         for generation in range(self.number_of_generations):
             # return rewards of agents
             rewards = self.calculate_fitness_for_all_agents(agents)
@@ -305,14 +262,9 @@ class GeneticAlgorithm():
                 np.mean(top_rewards[:5]))
             print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes[:self.top_limit_agents])
             print("Rewards for top: ", top_rewards)
+            #save informations about the generation
+            self.save_generation_results(agents, rewards, generation)
             # setup an empty list for containing children agents
             children_agents = self.create_next_generation(agents, sorted_parent_indexes)
             # kill all agents, and replace them with their children
             agents = children_agents
-            # save important results in lists
-            all_mean_rewards.append(np.mean(rewards))
-            all_mean_top_rewards.append(np.mean(top_rewards[:self.top_limit_agents]))
-            all_top_rewards.append(sorted_parent_indexes)
-            all_top_indexes.append(top_rewards)
-        self.save_generation_results(agents, all_mean_rewards, all_mean_top_rewards, all_top_indexes, 
-                                     all_top_rewards)

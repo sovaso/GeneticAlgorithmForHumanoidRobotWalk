@@ -16,14 +16,12 @@ from genetic_algorithm import GeneticAlgorithm
 
 if __name__ == "__main__":
     # main funtion for training
-    environment = gym.make('HumanoidPyBulletEnv-v0')
-    #hyper-parameter, set from https://arxiv.org/pdf/1712.06567.pdf
-    ga = GeneticAlgorithm(number_of_agents = 100, 
-                          number_of_generations = 50, 
-                          number_of_episodes = 3, 
-                          top_limit_agents = 6, 
-                          environment = environment, 
-                          mutation_power = 0.02,
-                          mutation_chance = 0.25,
+    env = gym.make('HumanoidPyBulletEnv-v0')
+    ga = GeneticAlgorithm(number_of_agents = 4, 
+                          number_of_generations = 3, 
+                          number_of_iterations = 3, 
+                          top_limit_agents = 2,  
+                          mutation_chance = 0.1,
+                          environment=env,
                           path_to_save_results = "../results")
     ga.run_genetic_algorithm()
