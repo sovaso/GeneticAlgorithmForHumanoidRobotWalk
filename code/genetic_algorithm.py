@@ -68,7 +68,7 @@ class GeneticAlgorithm():
         Args:
             number_of_agents (integer): number of population per each generation
             number_of_generations (integer): number of generations to run ga
-            number_of_iterations (integer): number of episodes to run each agent for fitness function
+            number_of_iterations (integer): number of epochs to train each agent for fitness function
             top_limit_agents (integer): number of how many agents from current generation to pick to
                                         keep in next generation
             mutation_chance (float): chance that crossovered agent will be mutated
@@ -94,7 +94,7 @@ class GeneticAlgorithm():
         #possible starter values for agents to pick for parameters we want to optimize
         a2_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
         a1_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
-        a0_options = [1   ,2   ,3   ,4   ,5   ,6   ,7   ,8   ,9   ,10  ]
+        a0_options = [1.0 ,2.0 ,3.0 ,4.0 ,5.0 ,6.0 ,7.0 ,8.0 ,9.0 ,10.0]
 
         agents = []
         #for each expected agent number we create one agent
@@ -110,7 +110,7 @@ class GeneticAlgorithm():
                      cg_iterations = 10,
                      alpha=0.99,
                      backtrack_steps_num=100,
-                     critic_epoch_num=5,
+                     critic_epoch_num=20,
                      epochs=self.number_of_iterations,
                      num_of_timesteps=4800,
                      max_timesteps_per_episode=1600)

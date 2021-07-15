@@ -18,9 +18,9 @@ if __name__ == "__main__":
     """ Main funtion for training the GA """
     
     env = gym.make('HumanoidPyBulletEnv-v0')
-    ga = GeneticAlgorithm(number_of_agents = 4, 
-                          number_of_generations = 3, 
-                          number_of_iterations = 3, 
+    ga = GeneticAlgorithm(number_of_agents = 10, 
+                          number_of_generations = 20, 
+                          number_of_iterations = 30, 
                           top_limit_agents = 2,  
                           mutation_chance = 0.1,
                           environment=env,

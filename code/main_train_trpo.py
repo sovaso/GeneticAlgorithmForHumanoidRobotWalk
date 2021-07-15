@@ -28,7 +28,7 @@ if __name__ == "__main__":
                      cg_iterations = 10,
                      alpha=0.99,
                      backtrack_steps_num=100,
-                     critic_epoch_num=5,
+                     critic_epoch_num=20,
                      epochs=5,
                      num_of_timesteps=4800,
                      max_timesteps_per_episode=1600)
