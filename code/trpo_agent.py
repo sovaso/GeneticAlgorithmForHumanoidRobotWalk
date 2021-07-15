@@ -212,7 +212,10 @@ class TRPOAgent():
         for i in reversed(range(len(rewards))):
             if i == 0:
                 rewards[i] = 0
-            sum += rewards[i] * gamma_coef
+            if rewards[i] > 0:
+                sum += rewards[i] * gamma_coef
+            else:
+                sum += rewards[i] / gamma_coef
             gamma_coef *= self.gamma
         return sum
 
