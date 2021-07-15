@@ -16,14 +16,13 @@ Episode = namedtuple('Episode', ['states', 'actions', 'rewards', 'next_states', 
 class TRPOAgent():
     """ Main class that implements TRPO algorithm to improve actor and critic neural networks """
 
-    def __init__(self, env, actor, critic, delta_a2, delta_a1, delta_a0, gamma, cg_delta, cg_iterations, 
+    def __init__(self, actor, critic, delta_a2, delta_a1, delta_a0, gamma, cg_delta, cg_iterations, 
                  alpha, backtrack_steps_num, critic_epoch_num, epochs, num_of_timesteps,
                  max_timesteps_per_episode, starting_with=0):
         """
         Initialize the parameters of TRPO class
 
         Args:
-            env (object): environment which we will solve using trpo algorithm
             actor (object): actor model for this problem that is used as a policy function
             critic (object): critic model for this problem that is used as a value state function
             delta_a2 (float): part of a number used as a KL divergence constraint between two distributions
@@ -48,7 +47,6 @@ class TRPOAgent():
         self.delta_a2 = delta_a2
         self.delta_a1 = delta_a1
         self.delta_a0 = delta_a0
-        self.env = env
         self.gamma = gamma
         self.cg_delta = cg_delta
         self.cg_iterations = cg_iterations
@@ -115,8 +113,7 @@ class TRPOAgent():
 
         mean2 = mean2.detach()
         std2 = std2.detach()
-        kl_div = torch.log(std1) - torch.log(std2) + (std2.pow(2) + (mean1 - mean2).pow(2)) \ 
-                 / (2.0 * std1.pow(2)) - 0.5
+        kl_div = torch.log(std1)-torch.log(std2)+(std2.pow(2)+(mean1-mean2).pow(2))/(2.0*std1.pow(2))-0.5
         return kl_div.sum(1, keepdim=True).mean()
 
     def compute_grad(self, y, x, retain_graph=False, create_graph=False):
@@ -278,10 +275,11 @@ class TRPOAgent():
         while not criterion((self.alpha ** i) * max_step) and i < self.backtrack_steps_num:
             i += 1
 
-    def train(self, render_frequency=None, return_only_rewards=False):
+    def train(self, env, render_frequency=None, return_only_rewards=False):
         """ Main function used for training the TRPO agent
 
         Args:
+            env (object): environment to run your agent on
             render_frequency (int, optional): speed of rendering the environment, expressed in ms, 
                                               if None then there is no rendering. Defaults to None.
             return_only_rewards (bool, optional): if true, function will return the cumulative reward 
@@ -303,7 +301,7 @@ class TRPOAgent():
             while curr_number_of_timesteps < self.num_of_timesteps:
 
                 num_of_steps = 0
-                state = self.env.reset()
+                state = env.reset()
                 done = False
                 samples = []
                 curr_episode_steps = 0
@@ -311,12 +309,12 @@ class TRPOAgent():
 
                     #rendering the environment
                     if render_frequency is not None and global_episode % render_frequency == 0:
-                        self.env.render()
+                        env.render()
                     #getting action and probability of it based on current state
                     action, probability = self.actor.get_action(state)
                     curr_action = action.numpy()
                     #running current action in the environment
-                    next_state, reward, done, _ = self.env.step(curr_action)
+                    next_state, reward, done, _ = env.step(curr_action)
                     num_of_steps += 1
                     samples.append((state, action, reward, next_state, probability))
                     state = next_state

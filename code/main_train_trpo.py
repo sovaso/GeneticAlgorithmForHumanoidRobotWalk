@@ -17,8 +17,7 @@ if __name__ == "__main__":
     #actor.model.load_state_dict(torch.load('./models/actor40900.pth'))
     critic = Critic(44, 1, 2.5e-4)
     #critic.model.load_state_dict(torch.load('./models/critic40900.pth'))
-    trpo = TRPOAgent(env=env,
-                     actor=actor,
+    trpo = TRPOAgent(actor=actor,
                      critic=critic,
                      delta_a2=1e-2,
                      delta_a1=1e-2,
@@ -32,4 +31,4 @@ if __name__ == "__main__":
                      epochs=5,
                      num_of_timesteps=4800,
                      max_timesteps_per_episode=1600)
-    trpo.train()
+    trpo.train(env=env)

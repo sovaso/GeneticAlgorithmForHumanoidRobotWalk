@@ -99,21 +99,20 @@ class GeneticAlgorithm():
         agents = []
         #for each expected agent number we create one agent
         for iter in range(self.number_of_agents):
-            agent = TRPOAgent(env=self.environment,
-                     actor=Actor(44, 17),
-                     critic=Critic(44, 1, 2.5e-4),
-                     delta_a2=a2_options[iter],
-                     delta_a1=a1_options[iter],
-                     delta_a0=a0_options[iter],
-                     gamma=0.99,
-                     cg_delta=1e-2,
-                     cg_iterations = 10,
-                     alpha=0.99,
-                     backtrack_steps_num=100,
-                     critic_epoch_num=20,
-                     epochs=self.number_of_iterations,
-                     num_of_timesteps=4800,
-                     max_timesteps_per_episode=1600)
+            agent = TRPOAgent(actor=Actor(44, 17),
+                              critic=Critic(44, 1, 2.5e-4),
+                              delta_a2=a2_options[iter],
+                              delta_a1=a1_options[iter],
+                              delta_a0=a0_options[iter],
+                              gamma=0.99,
+                              cg_delta=1e-2,
+                              cg_iterations = 10,
+                              alpha=0.99,
+                              backtrack_steps_num=100,
+                              critic_epoch_num=20,
+                              epochs=self.number_of_iterations,
+                              num_of_timesteps=4800,
+                              max_timesteps_per_episode=1600)
             agents.append(agent)
         return agents
 
@@ -129,7 +128,7 @@ class GeneticAlgorithm():
 
         reward_agents = []
         for agent in agents:
-            cumulative_reward = agent.train(return_only_rewards=True)
+            cumulative_reward = agent.train(env=self.environment, return_only_rewards=True)
             reward_agents.append(cumulative_reward)
         return reward_agents
 
@@ -177,9 +176,9 @@ class GeneticAlgorithm():
             return agent
         child_agent = copy.deepcopy(agent)
         c2 = random.uniform(0, 1)
-        child_agent.delta_a2 *= 0.1 * (2*c2 - 1.0)
-        child_agent.delta_a1 *= 0.1 * (2*c2 - 1.0)
-        child_agent.delta_a0 *= 0.1 * (2*c2 - 1.0)
+        child_agent.delta_a2 += 0.1 * (2*c2 - 1.0) * child_agent.delta_a2
+        child_agent.delta_a1 += 0.1 * (2*c2 - 1.0) * child_agent.delta_a1
+        child_agent.delta_a0 += 0.1 * (2*c2 - 1.0) * child_agent.delta_a0
         return child_agent
 
     def crossover_agents(self, first_agent, second_agent):
@@ -278,8 +277,6 @@ class GeneticAlgorithm():
             rewards = self.calculate_fitness_for_all_agents(agents)
             #sort by rewards
             sorted_parent_indexes = np.argsort(rewards)[::-1] 
-            print("")
-            print("")
             top_rewards = []
             for best_parent in sorted_parent_indexes[:self.top_limit_agents]:
                 top_rewards.append(rewards[best_parent])
@@ -287,6 +284,8 @@ class GeneticAlgorithm():
                 np.mean(top_rewards[:5]))
             print("Top ", self.top_limit_agents, " scores", sorted_parent_indexes[:self.top_limit_agents])
             print("Rewards for top: ", top_rewards)
+            print("")
+            print("")
             #save informations about the generation
             self.save_generation_results(agents, rewards, generation)
             #setup an empty list for containing children agents
