@@ -8,6 +8,8 @@ from trpo_agent import TRPOAgent
 
 
 if __name__ == "__main__":
+    """ Main function for training the TRPO Agent """
+
     env = gym.make('HumanoidPyBulletEnv-v0')
     #env.render()
     env.reset()
@@ -30,4 +32,4 @@ if __name__ == "__main__":
                      epochs=5,
                      num_of_timesteps=4800,
                      max_timesteps_per_episode=1600)
-    trpo.train(return_only_rewards = True)
+    trpo.train()

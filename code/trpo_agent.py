@@ -14,10 +14,10 @@ Episode = namedtuple('Episode', ['states', 'actions', 'rewards', 'next_states', 
 
 
 class TRPOAgent():
-    """ Main class that implements trpo algorithm to improve actor and critic neural networks """
+    """ Main class that implements TRPO algorithm to improve actor and critic neural networks """
 
-    def __init__(self, env, actor, critic, delta_a2, delta_a1, delta_a0, gamma, cg_delta, cg_iterations, alpha, 
-                 backtrack_steps_num, critic_epoch_num, epochs, num_of_timesteps,
+    def __init__(self, env, actor, critic, delta_a2, delta_a1, delta_a0, gamma, cg_delta, cg_iterations, 
+                 alpha, backtrack_steps_num, critic_epoch_num, epochs, num_of_timesteps,
                  max_timesteps_per_episode, starting_with=0):
         """
         Initialize the parameters of TRPO class
@@ -29,12 +29,18 @@ class TRPOAgent():
             delta_a2 (float): part of a number used as a KL divergence constraint between two distributions
             delta_a1 (float): part of a number used as a KL divergence constraint between two distributions
             delta_a0 (float): part of a number used as a KL divergence constraint between two distributions
-        :param gamma: discount factor
-        :param cg_delta: conjugate gradient constraint to tell us when to stop with the process
-        :param cg_iterations: maximum number of iterations for conjugate gradient algortihm
-        :param alpha: factor to compute max step to update actor parameters in order to satisfy the KL divergence constraint (delta)
-        :param backtrack_steps_num: number of steps to compute max step to update actor parameters
-        :param critic_epoch_num: number of epoch to train critic neural network
+            gamma (float): discount factor
+            cg_delta (float): conjugate gradient constraint to tell us when to stop with the process
+            cg_iterations (int): maximal number of iterations for conjugate gradient algortihm to perform
+            alpha (float): factor to compute max step to update actor parameters in order to satisfy the KL 
+                           divergence constraint (delta)
+            backtrack_steps_num (int): number of steps to compute max step to update actor parameters
+            critic_epoch_num (int): number of epoch to train critic neural network
+            epochs (int): number of epochs for TRPO algorithm to train
+            num_of_timesteps (int): number how many actions to take in one epoch
+            max_timesteps_per_episode (int): maximal number of actions in one episode
+            starting_with (int, optional): number that represents from which epoch we are starting the 
+                                           training. Defaults to 0. 
         """
 
         self.actor = actor
@@ -56,11 +62,14 @@ class TRPOAgent():
         self.delta = 0
 
     def estimate_advantages(self, states, rewards):
-        """
-        Estimating the advantage based on trajectories for one episode
-        :param states: states we visited during the episode
-        :param rewards: collected rewards in that concrete episode
-        :return: estimated advantage
+        """ Estimating the advantage based on trajectories for one episode
+
+        Args:
+            states (tensor): states we visited during the episode
+            rewards (tensor): collected rewards in that concrete episode
+        
+        Returns:
+            (array): estimated advantage
         """
 
         # using critic nn to get state values
@@ -76,42 +85,51 @@ class TRPOAgent():
         return rtg - values
 
     def surrogate_loss(self, new_probs, old_probs, advantages):
-        """
-        Calculating surrogate loss that is used for calculating policy network gradients.
-        Formula: mean(e^(p1-p2)*adv), where p1 and p2 are log probabilities
-        :param new_probs: log probabilities of the new policy
-        :param old_probs: log probabilities of the old policy
-        :param advantages: estimated advantage of all episodes of current epoch
-        :return: surrogate loss
+        """ Calculating surrogate loss that is used for calculating policy network gradients.
+            Formula: mean(e^(p1-p2)*adv), where p1 and p2 are log probabilities
+        
+        Args:
+            new_probs (array): log probabilities of the new policy
+            old_probs (array): log probabilities of the old policy
+            advantages (array): estimated advantage of all episodes of current epoch
+        
+        Returns:
+            (float): surrogate loss
         """
         return (torch.exp(new_probs - old_probs) * advantages).mean()
 
     def kl_divergence(self, mean1, std1, mean2, std2):
+        """ Calculating the KL divergence between two distributions (old and new policy)
+            Formula: log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / 
+                     (2.0 * std1.pow(2)) - 0.5
+        
+        Args:
+            mean1 (array): new means
+            std1 (array): new standard deviations
+            mean2 (array): old means
+            std2 (array): old standard deviations
+        
+        Returns:
+            (float): KL divergence between two distributions
         """
-        Calculating the KL divergence between two distributions (old and new policy)
-        Formula: log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / (2.0 * std1.pow(2)) - 0.5
-        :param mean1: new means
-        :param std1: new standard deviations
-        :param mean2: old means
-        :param std2: old standard deviations
-        :return: KL divergence between two distributions
-        """
-
-        # log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / (2.0 * std1.pow(2)) - 0.5
 
         mean2 = mean2.detach()
         std2 = std2.detach()
-        kl_div = torch.log(std1) - torch.log(std2) + (std2.pow(2) + (mean1 - mean2).pow(2)) / (2.0 * std1.pow(2)) - 0.5
+        kl_div = torch.log(std1) - torch.log(std2) + (std2.pow(2) + (mean1 - mean2).pow(2)) \ 
+                 / (2.0 * std1.pow(2)) - 0.5
         return kl_div.sum(1, keepdim=True).mean()
 
     def compute_grad(self, y, x, retain_graph=False, create_graph=False):
-        """
-        Calculating the derivative of y with respect to x -> dx/dy
-        :param y: function
-        :param x: parameter
-        :param retain_graph: boolean value should we retain a graph
-        :param create_graph: boolean value to define should we create a graph
-        :return: derivation dy/dx
+        """ Calculating the derivative of y with respect to x -> dx/dy
+        
+        Args:
+            y (function): function
+            x (array): parameter
+            retain_graph (boolean): boolean value should we retain a graph
+            create_graph (boolean): boolean value to define should we create a graph
+
+        Returns:
+            (function): derivation dy/dx
         """
 
         if create_graph:
@@ -121,11 +139,14 @@ class TRPOAgent():
         return grad
 
     def conjugate_gradient(self, hvp_function, b):
-        """
-        Calculate the H^1 * g using the conjugate gradient algorithm
-        :param hvp_function: hessian vector product function
-        :param b: vector that will be multiplied with inverse hessian matrix
-        :return: multiplication of vector g and inverse hessian matrix H^-1
+        """ Calculate the H^1 * g using the conjugate gradient algorithm
+        
+        Args:
+            hvp_function (function): hessian vector product function
+            b (vector): vector that will be multiplied with inverse hessian matrix
+        
+        Returns:
+            (function): multiplication of vector g and inverse hessian matrix H^-1
         """
 
         x = torch.zeros_like(b)
@@ -146,10 +167,14 @@ class TRPOAgent():
         return x
 
     def get_advantage_estimation(self, episodes):
-        """
-        Function to gather all estimated advantages of each episode of the epoch in one variable and normalize it
-        :param episodes: episodes of the epoch
-        :return: estimated normalized advantages
+        """ Function to gather all estimated advantages of each episode of the epoch in one variable 
+            and normalize it
+
+        Args:
+            episodes (array): episodes of the epoch
+        
+        Returns:
+            (array): estimated normalized advantages
         """
 
         #collect all advantages
@@ -159,11 +184,14 @@ class TRPOAgent():
         return (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
     def get_probability(self, actions, states):
-        """
-        Calculating logaritmic probability of actions based on states
-        :param actions: actions of the trajectories
-        :param states: states of the trajectories
-        :return: logarithmic probability
+        """ Calculating logaritmic probability of actions based on states
+        
+        Args:
+            actions (array): actions of the trajectories
+            states (array): states of the trajectories
+        
+        Returns:
+            (array): logarithmic probability
         """
 
         #mean of the distribution
@@ -173,6 +201,15 @@ class TRPOAgent():
         return logarithmic_probability
 
     def calculate_general_reward_for_agent(self, rewards):
+        """ Calculate reward for the agent that will represent fitness score for GA
+
+        Args:
+            rewards (array): array of rewards per each epoch that the agent was trained
+
+        Returns:
+            (float): cumulative reward as a fitness function for GA
+        """
+
         sum = 0
         gamma_coef = 1
         for i in reversed(range(len(rewards))):
@@ -183,9 +220,10 @@ class TRPOAgent():
         return sum
 
     def update_agent(self, episodes):
-        """
-        Function that update both critic and actor neural network's parameters
-        :param episodes: episodes in the epoch
+        """ Function that update both critic and actor neural network's parameters
+        
+        Args:
+            episodes (array): episodes in the epoch
         """
 
         # PART 1: get states and actions provided through parameter episodes
@@ -241,6 +279,17 @@ class TRPOAgent():
             i += 1
 
     def train(self, render_frequency=None, return_only_rewards=False):
+        """ Main function used for training the TRPO agent
+
+        Args:
+            render_frequency (int, optional): speed of rendering the environment, expressed in ms, 
+                                              if None then there is no rendering. Defaults to None.
+            return_only_rewards (bool, optional): if true, function will return the cumulative reward 
+                                                  for the whole training process. Defaults to False.
+
+        Returns:
+            (float): cumulative reward
+        """
 
         mean_total_rewards = []
         global_episode = 0
@@ -300,5 +349,6 @@ class TRPOAgent():
                            'HumanoidRobotWalk/code/trpo/models/critic' + str(epoch + self.starting_with + 1) + '.pt')
                 with open('HumanoidRobotWalk/code/trpo/models/rewards' + str(epoch + self.starting_with + 1) + '.txt', 'w+') as fp:
                     fp.write(str(mean_total_rewards))
+        print("")
         if return_only_rewards:
             return self.calculate_general_reward_for_agent(mean_total_rewards)

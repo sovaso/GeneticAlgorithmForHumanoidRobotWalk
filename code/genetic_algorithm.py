@@ -20,8 +20,17 @@ import json
 
 
 class UnitResultUtil:
+    """ Util class to help us keed information about one unit in the current generation """
 
     def __init__(self, delta_a2, delta_a1, delta_a0, reward):
+        """ Constructor for the unit result util class
+
+        Args:
+            delta_a2 (float): part of a delta function
+            delta_a1 (float): part of a delta function
+            delta_a0 (float): part of a delta function
+            reward (float): fitness score the agent with these parameters achieved
+        """
         self.delta_a2 = delta_a2
         self.delta_a1 = delta_a1
         self.delta_a0 = delta_a0
@@ -29,8 +38,14 @@ class UnitResultUtil:
 
 
 class GenerationResultUtil:
+    """ Util class to help us keep all information about units in current generation """
 
     def __init__(self, units):
+        """ Constructor for the generation result util class
+
+        Args:
+            units (array): all units in current generation
+        """
         self.units = units
 
     def to_json(self):
@@ -54,8 +69,10 @@ class GeneticAlgorithm():
             number_of_agents (integer): number of population per each generation
             number_of_generations (integer): number of generations to run ga
             number_of_iterations (integer): number of episodes to run each agent for fitness function
-            top_limit_agents (integer): number of how many agents to pick as possible parents for next
-                                        generation
+            top_limit_agents (integer): number of how many agents from current generation to pick to
+                                        keep in next generation
+            mutation_chance (float): chance that crossovered agent will be mutated
+            environment (object): environment where the game will be played
             path_to_save_results (string): path where the results will be saved
         """
 
@@ -74,6 +91,7 @@ class GeneticAlgorithm():
             (array): population of agents
         """
 
+        #possible starter values for agents to pick for parameters we want to optimize
         a2_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
         a1_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
         a0_options = [1   ,2   ,3   ,4   ,5   ,6   ,7   ,8   ,9   ,10  ]
@@ -116,8 +134,8 @@ class GeneticAlgorithm():
         return reward_agents
 
     def calculate_fitness_for_one_agent(self, agent):
-        """ Calculating fitness function for one specific agent by running him into the environment
-        n times and taking mean value from all runnings
+        """ Calculating fitness function for one specific agent by training it for N iterations and
+            then calculating cumulative reward it gets during that training
 
         Args:
             agent (object): one agent from the population
@@ -145,8 +163,7 @@ class GeneticAlgorithm():
         return fitness_scores
 
     def mutate_agent(self, agent):
-        """ Mutating agent using equation θ = θ + σ * e, where θ are the agent's nn's parameters,
-        σ is mutation coefficient (hyperparameter) and e is a number from normal distribution
+        """ Mutating agent in a range +/-10percent for its parameters value, with some chance
 
         Args:
             agent (object): one agent from the population
@@ -167,8 +184,8 @@ class GeneticAlgorithm():
 
     def crossover_agents(self, first_agent, second_agent):
         """ Creating two children by taking a random uniform number C between 0 and 1 and summing
-        both parent nns parameters by the formula: param1*C+param2(1-C) and other replacing param1
-        and param2 in the formula.
+            both parent parameters by the formula: param1*C+param2(1-C) and other replacing param1
+            and param2 in the formula.
 
         Args:
             first_agent (object): first parent
@@ -190,8 +207,8 @@ class GeneticAlgorithm():
         return first_child, second_child
 
     def create_next_generation(self, agents, sorted_parent_indexes):
-        """ Based on fitness score of current generation, create new generation by mutating
-        N-1 agents and adding one elite agent in order to form the next generation
+        """ Based on fitness score of current generation, take best agents from current generation
+            and the rest of needed population create using crossover with the mutation
 
         Args:
             agents (array): current generation of the population
@@ -211,14 +228,14 @@ class GeneticAlgorithm():
                                                                  agents[selected_agent_index_2])
             children_agents.append(self.mutate_agent(child_agent_1))
             children_agents.append(self.mutate_agent(child_agent_2))
-        #TODO
+        #take best agents into the next generation
         for index in sorted_parent_indexes[:self.top_limit_agents]:
             children_agents.append(self.mutate_agent(agents[index]))
         return children_agents
 
     def selection_of_parents(self, sorted_parent_indexes):
         """ Selecting possible parents for the crossover to create new generation and selecting them
-        based on fitness function (reward from episodes) using softmax to give everyone a chance
+            based on fitness function (reward from episodes) using softmax to give everyone a chance
 
         Args:
             sorted_parent_indexes (array): indexes of parents sorted by fitness function
@@ -235,6 +252,14 @@ class GeneticAlgorithm():
         return parent_indexes[0], parent_indexes[1]
 
     def save_generation_results(self, agents, rewards, number_of_generation):
+        """ Save information about the current generation by saving parameters and rewards of each unit
+            current generation
+
+        Args:
+            agents (array): current generation
+            rewards (array): fitness score of current generation
+            number_of_generation (int): index of current generation
+        """
         agent_results = []
         for iter in range(len(agents)):
             agent_results.append(UnitResultUtil(agents[iter].delta_a2,
@@ -249,9 +274,9 @@ class GeneticAlgorithm():
 
         agents = self.create_initial_population()
         for generation in range(self.number_of_generations):
-            # return rewards of agents
+            #return rewards of agents
             rewards = self.calculate_fitness_for_all_agents(agents)
-            # sort by rewards
+            #sort by rewards
             sorted_parent_indexes = np.argsort(rewards)[::-1] 
             print("")
             print("")
@@ -264,7 +289,11 @@ class GeneticAlgorithm():
             print("Rewards for top: ", top_rewards)
             #save informations about the generation
             self.save_generation_results(agents, rewards, generation)
-            # setup an empty list for containing children agents
+            #setup an empty list for containing children agents
             children_agents = self.create_next_generation(agents, sorted_parent_indexes)
-            # kill all agents, and replace them with their children
+            #kill all agents, and replace them with their children
             agents = children_agents
+            #reset each actor and critic of TRPO agent
+            for agent in agents:
+                agent.actor=Actor(44, 17)
+                agent.critic=Critic(44, 1, 2.5e-4)

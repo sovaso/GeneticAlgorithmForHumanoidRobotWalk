@@ -15,7 +15,8 @@ from genetic_algorithm import GeneticAlgorithm
 
 
 if __name__ == "__main__":
-    # main funtion for training
+    """ Main funtion for training the GA """
+    
     env = gym.make('HumanoidPyBulletEnv-v0')
     ga = GeneticAlgorithm(number_of_agents = 4, 
                           number_of_generations = 3, 
