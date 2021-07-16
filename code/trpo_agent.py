@@ -74,11 +74,14 @@ class TRPOAgent():
         values = self.critic.model.forward(states)
         # defining a variable to store rewards-to-go values
         rtg = torch.zeros_like(rewards)
-        # setting last value on zero
-        last_value = 0
         # calculating rewards-to-go
         for i in reversed(range(rewards.shape[0])):
-            last_value = rtg[i] = rewards[i] + self.gamma * last_value
+            for j in reversed(range(i,rewards.shape[0])):
+                if rewards[j] > 0:
+                    rtg[i] += rewards[j] * (self.gamma**(j-i))
+                else:
+                    rtg[i] += rewards[j] * (2 - (self.gamma**(j-i)))
+            #last_value = rtg[i] = rewards[i] + self.gamma * last_value
         # advantage = rewards-to-go - values
         return rtg - values
 
@@ -215,7 +218,7 @@ class TRPOAgent():
             if rewards[i] > 0:
                 sum += rewards[i] * gamma_coef
             else:
-                sum += rewards[i] / gamma_coef
+                sum += rewards[i] * (2.0 - gamma_coef)
             gamma_coef *= self.gamma
         return sum
 
