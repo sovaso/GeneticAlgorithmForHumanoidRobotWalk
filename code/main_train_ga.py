@@ -18,10 +18,10 @@ if __name__ == "__main__":
     """ Main funtion for training the GA """
     
     env = gym.make('HumanoidPyBulletEnv-v0')
-    ga = GeneticAlgorithm(number_of_agents = 10, 
+    ga = GeneticAlgorithm(number_of_agents = 5, 
                           number_of_generations = 20, 
-                          number_of_iterations = 30, 
-                          top_limit_agents = 2,  
+                          number_of_iterations = 2, 
+                          top_limit_agents = 1,  
                           mutation_chance = 0.1,
                           environment=env,
                           path_to_save_results = "../results")

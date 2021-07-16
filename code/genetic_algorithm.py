@@ -92,9 +92,9 @@ class GeneticAlgorithm():
         """
 
         #possible starter values for agents to pick for parameters we want to optimize
-        a2_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
-        a1_options = [1e-1,5e-2,1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5,5e-6]
-        a0_options = [1.0 ,2.0 ,3.0 ,4.0 ,5.0 ,6.0 ,7.0 ,8.0 ,9.0 ,10.0]
+        a2_options = [10**x for x in np.random.uniform(-10, -1, self.number_of_agents)]
+        a1_options = [10**x for x in np.random.uniform(-10, -1, self.number_of_agents)]
+        a0_options = np.random.uniform(1, 15, self.number_of_agents)
 
         agents = []
         #for each expected agent number we create one agent
@@ -229,7 +229,7 @@ class GeneticAlgorithm():
             children_agents.append(self.mutate_agent(child_agent_2))
         #take best agents into the next generation
         for index in sorted_parent_indexes[:self.top_limit_agents]:
-            children_agents.append(self.mutate_agent(agents[index]))
+            children_agents.append(agents[index])
         return children_agents
 
     def selection_of_parents(self, sorted_parent_indexes):
