@@ -62,7 +62,7 @@ class GeneticAlgorithm():
     """ Main class for the whole Genetic Algorithm process """
 
     def __init__(self, number_of_agents, number_of_generations, number_of_iterations, top_limit_agents, 
-                 mutation_chance, environment, path_to_save_results = "../results"):
+                 mutation_chance, environment, path_to_save_results = "../results", starts_from = 0):
         """ Constructor for the Genetic Algorithm class 
         
         Args:
@@ -74,6 +74,8 @@ class GeneticAlgorithm():
             mutation_chance (float): chance that crossovered agent will be mutated
             environment (object): environment where the game will be played
             path_to_save_results (string): path where the results will be saved
+            starts_from (int): number of generation to start with if it was already in process.
+                               Defaults to 0.
         """
 
         self.number_of_agents = number_of_agents
@@ -83,6 +85,7 @@ class GeneticAlgorithm():
         self.mutation_chance = mutation_chance
         self.path_to_save_results = path_to_save_results
         self.environment = environment
+        self.starts_from = starts_from
 
     def create_initial_population(self):
         """ Creating the first generation of the population by instancing new agents
@@ -268,13 +271,50 @@ class GeneticAlgorithm():
         with open(self.path_to_save_results + "/generation_" + str(number_of_generation) + ".json", 'w') as f:
             json.dump(GenerationResultUtil(agent_results).to_json(), f)
 
+    def read_last_generation(self):
+        """ Reading last saved generation of the GA algorithm
+
+        Returns:
+            (array, array): agents in the last generation and their fitness scores
+        """
+
+        agents, rewards = [], []
+        generation_json = None
+        with open(self.path_to_save_results + "/generation_" + str(self.starts_from-1) + ".json") as jsonFile:
+            generation_json = json.loads(json.load(jsonFile))
+            jsonFile.close()
+        for agent_unit in generation_json["units"]:
+            agent = TRPOAgent(actor=Actor(44, 17),
+                              critic=Critic(44, 1, 2.5e-4),
+                              delta_a2=agent_unit["delta_a2"],
+                              delta_a1=agent_unit["delta_a1"],
+                              delta_a0=agent_unit["delta_a0"],
+                              gamma=0.99,
+                              cg_delta=1e-2,
+                              cg_iterations = 10,
+                              alpha=0.99,
+                              backtrack_steps_num=100,
+                              critic_epoch_num=20,
+                              epochs=self.number_of_iterations,
+                              num_of_timesteps=4800,
+                              max_timesteps_per_episode=1600)
+            agents.append(agent)
+            rewards.append(agent_unit["reward"])
+        return agents, rewards
+
     def run_genetic_algorithm(self):
         """ Main funtion to run the genetic algorithm """
 
         agents = self.create_initial_population()
         for generation in range(self.number_of_generations):
-            #return rewards of agents
-            rewards = self.calculate_fitness_for_all_agents(agents)
+            print("\n=== GENERATION " + str(generation) + " ===")
+            if (generation < (self.starts_from-1)):
+                continue
+            if (self.starts_from != 0 and generation == (self.starts_from-1)):
+                agents, rewards = self.read_last_generation()
+            else:
+                #return rewards of agents
+                rewards = self.calculate_fitness_for_all_agents(agents)
             #sort by rewards
             sorted_parent_indexes = np.argsort(rewards)[::-1] 
             top_rewards = []
@@ -286,8 +326,9 @@ class GeneticAlgorithm():
             print("Rewards for top: ", top_rewards)
             print("")
             print("")
-            #save informations about the generation
-            self.save_generation_results(agents, rewards, generation)
+            if (self.starts_from==0 or (self.starts_from!=0 and generation!=(self.starts_from-1))):
+                #save informations about the generation
+                self.save_generation_results(agents, rewards, generation)
             #setup an empty list for containing children agents
             children_agents = self.create_next_generation(agents, sorted_parent_indexes)
             #kill all agents, and replace them with their children
