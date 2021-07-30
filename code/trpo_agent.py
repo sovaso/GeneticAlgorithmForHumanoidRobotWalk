@@ -18,7 +18,7 @@ class TRPOAgent():
 
     def __init__(self, actor, critic, delta_a2, delta_a1, delta_a0, gamma, cg_delta, cg_iterations, 
                  alpha, backtrack_steps_num, critic_epoch_num, epochs, num_of_timesteps,
-                 max_timesteps_per_episode, starting_with=0):
+                 max_timesteps_per_episode, starting_with=0, elementary_path=""):
         """
         Initialize the parameters of TRPO class
 
@@ -40,6 +40,8 @@ class TRPOAgent():
             max_timesteps_per_episode (int): maximal number of actions in one episode
             starting_with (int, optional): number that represents from which epoch we are starting the 
                                            training. Defaults to 0. 
+            elementary_path(string, optional): path where actor and critic model with rewards will be saved.
+                                               Defaults to "".
         """
 
         self.actor = actor
@@ -58,6 +60,7 @@ class TRPOAgent():
         self.max_timesteps_per_episode = max_timesteps_per_episode
         self.starting_with = starting_with
         self.delta = 0
+        self.elementary_path = elementary_path 
 
     def estimate_advantages(self, states, rewards):
         """ Estimating the advantage based on trajectories for one episode
@@ -294,10 +297,21 @@ class TRPOAgent():
 
         mean_total_rewards = []
         global_episode = 0
+
+        if self.starting_with > 0:
+            #if we want to continue  our training, we need to load previous state and results
+            self.actor.model.load_state_dict(torch.load(self.elementary_path + '/actor' + str(self.starting_with) + '.pt'))
+            self.critic.model.load_state_dict(torch.load(self.elementary_path + '/critic' + str(self.starting_with) + '.pt'))
+            rewards_txt = open(self.elementary_path + '/rewards' + str(self.starting_with) + '.txt', "r")
+            rewards_str = rewards_txt.read()
+            rewards_str = rewards_str[1:][:-1]
+            mean_total_rewards = [eval(rwd) for rwd in rewards_str.split(",")]
+
         for epoch in range(self.epochs):
 
             #calculate delta based on formula 1/(a2*epoch^2+a1*epoch+a0)
-            self.delta = 1.0 / (self.delta_a2 * (epoch+1)**2 + self.delta_a1 * (epoch+1) + self.delta_a0)
+            iteration = epoch+1+self.starting_with
+            self.delta = 1.0 / (self.delta_a2 * (iteration+1)**2 + self.delta_a1 * (iteration+1) + self.delta_a0)
 
             episodes, episode_total_rewards = [], []
             curr_number_of_timesteps, num_of_episodes = 0, 0
@@ -343,12 +357,12 @@ class TRPOAgent():
             print(f'E: {epoch+1+self.starting_with}.\tMean total reward across {num_of_episodes} episodes and {curr_number_of_timesteps} timesteps: {mtr}')
 
             #every 50 epoch, save all mean rewards and model for actor & critic
-            if epoch % 100 == 99:
+            if epoch % 100 == 4:
                 torch.save(self.actor.model.state_dict(),
-                           'HumanoidRobotWalk/code/trpo/models/actor' + str(epoch + self.starting_with + 1) + '.pt')
+                           self.elementary_path + '/actor' + str(epoch + self.starting_with + 1) + '.pt')
                 torch.save(self.critic.model.state_dict(),
-                           'HumanoidRobotWalk/code/trpo/models/critic' + str(epoch + self.starting_with + 1) + '.pt')
-                with open('HumanoidRobotWalk/code/trpo/models/rewards' + str(epoch + self.starting_with + 1) + '.txt', 'w+') as fp:
+                           self.elementary_path + '/critic' + str(epoch + self.starting_with + 1) + '.pt')
+                with open(self.elementary_path + '/rewards' + str(epoch + self.starting_with + 1) + '.txt', 'w+') as fp:
                     fp.write(str(mean_total_rewards))
         print("")
         if return_only_rewards:

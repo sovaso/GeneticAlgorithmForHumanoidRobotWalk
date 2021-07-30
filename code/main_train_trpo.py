@@ -14,9 +14,7 @@ if __name__ == "__main__":
     #env.render()
     env.reset()
     actor = Actor(44, 17)
-    #actor.model.load_state_dict(torch.load('./models/actor40900.pth'))
     critic = Critic(44, 1, 2.5e-4)
-    #critic.model.load_state_dict(torch.load('./models/critic40900.pth'))
     trpo = TRPOAgent(actor=actor,
                      critic=critic,
                      delta_a2=1e-2,
@@ -28,7 +26,9 @@ if __name__ == "__main__":
                      alpha=0.99,
                      backtrack_steps_num=100,
                      critic_epoch_num=20,
-                     epochs=5,
+                     epochs=5000,
                      num_of_timesteps=4800,
-                     max_timesteps_per_episode=1600)
+                     max_timesteps_per_episode=1600,
+                     starting_with=1700,
+                     elementary_path="../results/eksperiment2")
     trpo.train(env=env)
