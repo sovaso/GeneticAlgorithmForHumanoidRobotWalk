@@ -17,9 +17,9 @@ if __name__ == "__main__":
     critic = Critic(44, 1, 2.5e-4)
     trpo = TRPOAgent(actor=actor,
                      critic=critic,
-                     delta_a2=1e-2,
-                     delta_a1=1e-2,
-                     delta_a0=3,
+                     delta_a2=0.01487870062184785,
+                     delta_a1=0.0005061652202640241,
+                     delta_a0=8.163872665158063,
                      gamma=0.99,
                      cg_delta=1e-2,
                      cg_iterations = 10,
@@ -29,6 +29,6 @@ if __name__ == "__main__":
                      epochs=5000,
                      num_of_timesteps=4800,
                      max_timesteps_per_episode=1600,
-                     starting_with=1700,
-                     elementary_path="../results/eksperiment2")
+                     starting_with=4000,
+                     elementary_path="gdrive/MyDrive/master/trpo/eksperiment2")
     trpo.train(env=env)

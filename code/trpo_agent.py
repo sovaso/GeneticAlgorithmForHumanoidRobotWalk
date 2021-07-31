@@ -357,7 +357,7 @@ class TRPOAgent():
             print(f'E: {epoch+1+self.starting_with}.\tMean total reward across {num_of_episodes} episodes and {curr_number_of_timesteps} timesteps: {mtr}')
 
             #every 50 epoch, save all mean rewards and model for actor & critic
-            if epoch % 100 == 4:
+            if epoch % 100 == 99:
                 torch.save(self.actor.model.state_dict(),
                            self.elementary_path + '/actor' + str(epoch + self.starting_with + 1) + '.pt')
                 torch.save(self.critic.model.state_dict(),
